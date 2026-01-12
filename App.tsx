@@ -120,24 +120,33 @@ const App: React.FC = () => {
         
         if (Array.isArray(imported)) {
           // Validar que los objetos importados tengan estructura mínima
-          const validBooks = imported.filter(b => b.title && b.id);
+          const validBooks = imported.filter(b => b.title);
           
           if (validBooks.length > 0) {
-            if (confirm(`Se han encontrado ${validBooks.length} libros válidos. ¿Deseas añadirlos?`)) {
+            if (confirm(`Se han encontrado ${validBooks.length} libros. ¿Deseas importarlos a tu colección?`)) {
+              // Asegurar que cada libro tenga un ID único si no lo tiene
+              const processedBooks = validBooks.map(b => ({
+                ...b,
+                id: b.id || crypto.randomUUID(),
+                dateAdded: b.dateAdded || Date.now(),
+                status: b.status || 'want-to-read',
+                rating: b.rating || 0
+              }));
+
               // Combinar evitando duplicados por ID
               const existingIds = new Set(books.map(b => b.id));
-              const uniqueNewBooks = validBooks.filter(b => !existingIds.has(b.id));
+              const uniqueNewBooks = processedBooks.filter(b => !existingIds.has(b.id));
               const updatedList = [...uniqueNewBooks, ...books];
               
               saveState(updatedList);
-              alert(`${uniqueNewBooks.length} libros añadidos correctamente.`);
+              alert(`${uniqueNewBooks.length} libros nuevos añadidos.`);
             }
           } else {
-            alert("No se encontraron libros válidos en el archivo.");
+            alert("El archivo no contiene libros válidos.");
           }
         }
       } catch (err) {
-        alert("El archivo JSON no es válido.");
+        alert("Error: El archivo JSON no es válido.");
       } finally {
         if (fileInputRef.current) fileInputRef.current.value = '';
       }
@@ -146,21 +155,32 @@ const App: React.FC = () => {
   };
 
   const deleteBook = useCallback((id: string) => {
-    if(confirm("¿Estás seguro de eliminar este libro?")) {
-      const updated = books.filter(b => b.id !== id);
-      saveState(updated);
+    // Implementación de la confirmación antes de borrar
+    const confirmed = window.confirm("¿Estás seguro de que deseas eliminar este libro de tu biblioteca? Esta acción no se puede deshacer.");
+    if (confirmed) {
+      setBooks(prev => {
+        const updated = prev.filter(b => b.id !== id);
+        localStorage.setItem('libros_manual_v1', JSON.stringify(updated));
+        return updated;
+      });
     }
-  }, [books]);
+  }, []);
 
   const toggleStatus = useCallback((id: string) => {
-    const updated = books.map(b => b.id === id ? { ...b, status: (b.status === 'read' ? 'want-to-read' : 'read') as any } : b);
-    saveState(updated);
-  }, [books]);
+    setBooks(prev => {
+      const updated = prev.map(b => b.id === id ? { ...b, status: (b.status === 'read' ? 'want-to-read' : 'read') as any } : b);
+      localStorage.setItem('libros_manual_v1', JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
 
   const rateBook = useCallback((id: string, rating: number) => {
-    const updated = books.map(b => b.id === id ? { ...b, rating } : b);
-    saveState(updated);
-  }, [books]);
+    setBooks(prev => {
+      const updated = prev.map(b => b.id === id ? { ...b, rating } : b);
+      localStorage.setItem('libros_manual_v1', JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
 
   const filteredBooks = books.filter(b => filter === 'all' ? true : b.status === filter);
 
@@ -178,11 +198,11 @@ const App: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-4">
-            <button onClick={exportLibrary} className="p-2 sm:p-3 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center gap-2">
+            <button onClick={exportLibrary} title="Exportar Biblioteca" className="p-2 sm:p-3 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center gap-2">
               <span className="hidden md:inline text-[10px] font-bold uppercase tracking-widest">Exportar</span>
               📤
             </button>
-            <button onClick={() => fileInputRef.current?.click()} className="p-2 sm:p-3 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors flex items-center gap-2">
+            <button onClick={() => fileInputRef.current?.click()} title="Importar Biblioteca" className="p-2 sm:p-3 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors flex items-center gap-2">
               <span className="hidden md:inline text-[10px] font-bold uppercase tracking-widest">Importar</span>
               📥
             </button>
@@ -204,9 +224,10 @@ const App: React.FC = () => {
         </div>
 
         {filteredBooks.length === 0 ? (
-          <div className="text-center py-32 bg-white dark:bg-slate-900/50 rounded-[3rem] border-4 border-dashed border-slate-200 dark:border-slate-800">
+          <div className="text-center py-32 bg-white dark:bg-slate-900/50 rounded-[3rem] border-4 border-dashed border-slate-200 dark:border-slate-800 animate-in fade-in">
             <div className="text-4xl mb-4">📚</div>
             <p className="text-slate-400 font-bold uppercase tracking-widest text-sm">Biblioteca vacía</p>
+            <p className="text-slate-500 text-xs mt-2 uppercase">Presiona "Importar" para recuperar tu archivo JSON</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
@@ -231,7 +252,7 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Modal Editar */}
+      {/* Modales de Edición, Adición y Bio (se mantienen igual pero con consistencia de estilos) */}
       {editingBook && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-xl">
           <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[2.5rem] shadow-2xl p-10 sm:p-14 overflow-y-auto no-scrollbar max-h-[95vh]">
@@ -265,7 +286,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Modal Añadir */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-xl">
           <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[2.5rem] shadow-2xl p-10 sm:p-14 overflow-y-auto no-scrollbar max-h-[95vh]">
@@ -275,7 +295,7 @@ const App: React.FC = () => {
                   <h3 className="text-3xl font-black">Nuevo Libro</h3>
                   <button type="button" onClick={() => setIsModalOpen(false)} className="text-slate-400 text-2xl">✕</button>
                 </div>
-                <input autoFocus type="text" placeholder="Título o autor..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} disabled={isSearching} className="w-full p-8 bg-slate-50 dark:bg-slate-800/50 rounded-3xl mb-10 text-2xl font-bold border-4 border-transparent focus:border-indigo-600 outline-none transition-all" />
+                <input autoFocus type="text" placeholder="Título o autor..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} disabled={isSearching} className="w-full p-8 bg-slate-50 dark:bg-slate-800/50 rounded-3xl mb-10 text-2xl font-bold border-4 border-transparent focus:border-indigo-600 outline-none transition-all shadow-inner" />
                 <div className="flex gap-6">
                   <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-6 bg-slate-100 dark:bg-slate-800 rounded-2xl font-black uppercase text-xs">Cancelar</button>
                   <button type="submit" disabled={isSearching || !searchQuery.trim()} className="flex-[2] py-6 bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs shadow-xl">Generar IA</button>
@@ -283,7 +303,7 @@ const App: React.FC = () => {
                 {isSearching && <p className="mt-6 text-center text-indigo-600 text-xs font-black animate-pulse uppercase tracking-widest">{searchStatus}</p>}
               </form>
             ) : (
-              <div className="animate-in slide-in-from-bottom">
+              <div className="animate-in slide-in-from-bottom duration-500">
                 <div className="flex gap-10 mb-8 flex-col sm:flex-row">
                   <img src={previewBook.tempBase64} className="w-52 aspect-[2/3] object-cover rounded-[2rem] shadow-2xl mx-auto border-4 border-white dark:border-slate-800" />
                   <div className="flex-grow">
@@ -292,13 +312,13 @@ const App: React.FC = () => {
                     <p className="text-slate-500 text-sm italic mb-6 leading-relaxed line-clamp-4">{previewBook.summary}</p>
                     <div className="space-y-2">
                       <label className="text-[10px] font-black uppercase text-slate-400">Enlace Drive (opcional):</label>
-                      <input type="text" value={manualDriveLink} onChange={e => setManualDriveLink(e.target.value)} className="w-full p-4 bg-slate-100 dark:bg-slate-800 rounded-xl text-xs outline-none focus:ring-2 ring-indigo-500" placeholder="Pega el link aquí..." />
+                      <input type="text" value={manualDriveLink} onChange={e => setManualDriveLink(e.target.value)} className="w-full p-4 bg-slate-100 dark:bg-slate-800 rounded-xl text-xs outline-none focus:ring-2 ring-indigo-500" placeholder="Pega el link de Google Drive aquí..." />
                     </div>
                   </div>
                 </div>
                 <div className="flex gap-6">
                   <button onClick={() => setPreviewBook(null)} className="flex-1 py-4 bg-slate-100 dark:bg-slate-800 rounded-2xl font-black uppercase text-xs">Atrás</button>
-                  <button onClick={addBookToLibrary} className="flex-[2] py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase text-xs shadow-xl">Confirmar</button>
+                  <button onClick={addBookToLibrary} className="flex-[2] py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase text-xs shadow-xl">Confirmar Guardado</button>
                 </div>
               </div>
             )}
@@ -306,12 +326,11 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Modal Bio */}
       {authorBio && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/95 backdrop-blur-2xl">
           <div className="bg-white dark:bg-slate-900 w-full max-w-xl rounded-[3rem] p-12 shadow-2xl animate-in zoom-in">
             <h3 className="text-3xl font-black mb-6 text-indigo-600">{authorBio.name}</h3>
-            <p className="text-slate-600 dark:text-slate-300 leading-relaxed mb-10 whitespace-pre-wrap">{isLoadingBio ? "Buscando..." : authorBio.bio}</p>
+            <p className="text-slate-600 dark:text-slate-300 leading-relaxed mb-10 whitespace-pre-wrap">{isLoadingBio ? "Buscando biografía..." : authorBio.bio}</p>
             <button onClick={() => setAuthorBio(null)} className="w-full py-5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl font-black uppercase text-xs">Cerrar</button>
           </div>
         </div>

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Book } from '../types';
 
 interface BookCardProps {
@@ -12,16 +12,7 @@ interface BookCardProps {
 }
 
 export const BookCard: React.FC<BookCardProps> = ({ book, onDelete, onToggleStatus, onRate, onAuthorClick, onEdit }) => {
-  const [isConfirming, setIsConfirming] = useState(false);
-
-  useEffect(() => {
-    let timeout: number;
-    if (isConfirming) {
-      timeout = window.setTimeout(() => setIsConfirming(false), 3000);
-    }
-    return () => clearTimeout(timeout);
-  }, [isConfirming]);
-
+  
   const getDirectDriveLink = (url: string) => {
     if (!url) return null;
     if (url.includes('drive.google.com')) {
@@ -34,7 +25,7 @@ export const BookCard: React.FC<BookCardProps> = ({ book, onDelete, onToggleStat
   };
 
   const driveImg = getDirectDriveLink(book.driveUrl || '');
-  // Usar drive si existe, sino coverUrl, sino placeholder con texto
+  // Priorizar imagen de Drive, luego base64 local, y finalmente un placeholder con el título.
   const displayCover = driveImg || book.coverUrl || `https://via.placeholder.com/400x600/4f46e5/ffffff?text=${encodeURIComponent(book.title)}`;
 
   return (
@@ -52,9 +43,9 @@ export const BookCard: React.FC<BookCardProps> = ({ book, onDelete, onToggleStat
         
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-6 gap-2">
            {book.driveUrl && (
-             <a href={book.driveUrl} target="_blank" rel="noopener noreferrer" className="w-full py-3 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest text-center shadow-lg">Ver en Drive</a>
+             <a href={book.driveUrl} target="_blank" rel="noopener noreferrer" className="w-full py-3 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest text-center shadow-lg hover:bg-indigo-700 transition-colors">Ver en Drive</a>
            )}
-           <button onClick={onEdit} className="w-full py-3 bg-white/20 backdrop-blur-md text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white/40">Editar Datos</button>
+           <button onClick={onEdit} className="w-full py-3 bg-white/20 backdrop-blur-md text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white/40 transition-colors">Editar Datos</button>
         </div>
 
         <div className={`absolute top-4 left-4 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider shadow-lg backdrop-blur-md z-10 ${
@@ -67,7 +58,7 @@ export const BookCard: React.FC<BookCardProps> = ({ book, onDelete, onToggleStat
       <div className="p-6 flex flex-col flex-grow">
         <div className="mb-4">
           <h3 className="text-lg font-bold text-slate-900 dark:text-white leading-tight mb-1 line-clamp-2">{book.title}</h3>
-          <button onClick={() => onAuthorClick(book.author)} className="text-indigo-600 dark:text-indigo-400 text-xs font-semibold hover:underline">{book.author}</button>
+          <button onClick={() => onAuthorClick(book.author)} className="text-indigo-600 dark:text-indigo-400 text-xs font-semibold hover:underline text-left">{book.author}</button>
         </div>
         
         {book.status === 'read' && (
@@ -86,7 +77,12 @@ export const BookCard: React.FC<BookCardProps> = ({ book, onDelete, onToggleStat
           <button onClick={() => onToggleStatus(book.id)} className={`w-full py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${book.status === 'read' ? 'bg-slate-100 dark:bg-slate-800 text-slate-500' : 'bg-indigo-600 text-white shadow-md'}`}>
             {book.status === 'read' ? 'Leído' : '¿Terminado?'}
           </button>
-          <button onClick={() => onDelete(book.id)} className="w-full py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-red-500 transition-colors">Eliminar</button>
+          <button 
+            onClick={() => onDelete(book.id)} 
+            className="w-full py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-red-500 transition-colors"
+          >
+            Eliminar Libro
+          </button>
         </div>
       </div>
     </div>
