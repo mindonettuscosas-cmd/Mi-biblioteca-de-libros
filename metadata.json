@@ -1,0 +1,5 @@
+{
+  "name": "Mi Biblioteca de Libros con Drive",
+  "description": "Gestión de biblioteca con almacenamiento de portadas en Google Drive Público.",
+  "requestFramePermissions": []
+}
