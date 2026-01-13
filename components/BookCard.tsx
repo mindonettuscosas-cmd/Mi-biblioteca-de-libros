@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Book } from '../types';
 
 interface BookCardProps {
@@ -12,7 +12,21 @@ interface BookCardProps {
 }
 
 export const BookCard: React.FC<BookCardProps> = ({ book, onDelete, onToggleStatus, onRate, onAuthorClick, onEdit }) => {
-  
+  const [isConfirming, setIsConfirming] = useState(false);
+
+  // Resetear el estado de confirmación después de 3 segundos de inactividad
+  useEffect(() => {
+    let timeout: number;
+    if (isConfirming) {
+      timeout = window.setTimeout(() => {
+        setIsConfirming(false);
+      }, 3000);
+    }
+    return () => {
+      if (timeout) window.clearTimeout(timeout);
+    };
+  }, [isConfirming]);
+
   const getDirectDriveLink = (url: string) => {
     if (!url) return null;
     if (url.includes('drive.google.com')) {
@@ -24,8 +38,17 @@ export const BookCard: React.FC<BookCardProps> = ({ book, onDelete, onToggleStat
     return url;
   };
 
+  const handleDeleteClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isConfirming) {
+      onDelete(book.id);
+      setIsConfirming(false);
+    } else {
+      setIsConfirming(true);
+    }
+  };
+
   const driveImg = getDirectDriveLink(book.driveUrl || '');
-  // Priorizar imagen de Drive, luego base64 local, y finalmente un placeholder con el título.
   const displayCover = driveImg || book.coverUrl || `https://via.placeholder.com/400x600/4f46e5/ffffff?text=${encodeURIComponent(book.title)}`;
 
   return (
@@ -78,10 +101,14 @@ export const BookCard: React.FC<BookCardProps> = ({ book, onDelete, onToggleStat
             {book.status === 'read' ? 'Leído' : '¿Terminado?'}
           </button>
           <button 
-            onClick={() => onDelete(book.id)} 
-            className="w-full py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-red-500 transition-colors"
+            onClick={handleDeleteClick} 
+            className={`w-full py-2 text-[9px] font-black uppercase tracking-widest transition-all duration-300 rounded-lg ${
+              isConfirming 
+                ? 'bg-red-600 text-white shadow-lg scale-105' 
+                : 'text-slate-400 hover:text-red-500'
+            }`}
           >
-            Eliminar Libro
+            {isConfirming ? '⚠️ ¿Confirmar eliminación?' : 'Eliminar Libro'}
           </button>
         </div>
       </div>

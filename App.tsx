@@ -21,7 +21,7 @@ const App: React.FC = () => {
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Carga inicial desde LocalStorage
+  // Carga inicial
   useEffect(() => {
     const saved = localStorage.getItem('libros_manual_v1');
     if (saved) {
@@ -42,9 +42,9 @@ const App: React.FC = () => {
     localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
   }, [isDarkMode]);
 
-  // Guardar estado de forma segura
   const saveState = (newBooks: Book[]) => {
-    const sorted = [...newBooks].sort((a, b) => b.dateAdded - a.dateAdded);
+    // Ordenar por fecha de añadido (más reciente primero)
+    const sorted = [...newBooks].sort((a, b) => (b.dateAdded || 0) - (a.dateAdded || 0));
     setBooks(sorted);
     localStorage.setItem('libros_manual_v1', JSON.stringify(sorted));
   };
@@ -53,7 +53,7 @@ const App: React.FC = () => {
     e.preventDefault();
     if (!searchQuery.trim() || isSearching) return;
     setIsSearching(true);
-    setSearchStatus('Gemini está diseñando la ficha y la portada con texto...');
+    setSearchStatus('Buscando información y diseñando portada...');
     try {
       const result = await searchBookInfo(searchQuery);
       setPreviewBook(result);
@@ -69,12 +69,12 @@ const App: React.FC = () => {
     
     const newBook: Book = {
       id: crypto.randomUUID(),
-      title: previewBook.title,
-      author: previewBook.author,
-      year: previewBook.year,
-      summary: previewBook.summary,
-      tags: previewBook.tags,
-      coverUrl: previewBook.tempBase64 || '',
+      title: previewBook.title || 'Sin título',
+      author: previewBook.author || 'Autor desconocido',
+      year: previewBook.year || '',
+      summary: previewBook.summary || '',
+      tags: previewBook.tags || [],
+      coverUrl: manualDriveLink ? '' : (previewBook.tempBase64 || ''),
       driveUrl: manualDriveLink,
       status: 'want-to-read',
       rating: 0,
@@ -89,7 +89,11 @@ const App: React.FC = () => {
   };
 
   const updateBook = (updatedBook: Book) => {
-    const newBooks = books.map(b => b.id === updatedBook.id ? updatedBook : b);
+    const cleanedBook = {
+      ...updatedBook,
+      coverUrl: updatedBook.driveUrl ? '' : updatedBook.coverUrl
+    };
+    const newBooks = books.map(b => b.id === cleanedBook.id ? cleanedBook : b);
     saveState(newBooks);
     setEditingBook(null);
   };
@@ -103,7 +107,7 @@ const App: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `mi_biblioteca_${new Date().toISOString().split('T')[0]}.json`;
+    link.download = `biblioteca_${new Date().getTime()}.json`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -119,34 +123,47 @@ const App: React.FC = () => {
         const imported = JSON.parse(content);
         
         if (Array.isArray(imported)) {
-          // Validar que los objetos importados tengan estructura mínima
-          const validBooks = imported.filter(b => b.title);
+          // Filtrar libros que al menos tengan un título
+          const validBooks = imported.filter(b => b && (b.title || b.author));
           
           if (validBooks.length > 0) {
-            if (confirm(`Se han encontrado ${validBooks.length} libros. ¿Deseas importarlos a tu colección?`)) {
-              // Asegurar que cada libro tenga un ID único si no lo tiene
+            if (window.confirm(`Se han detectado ${validBooks.length} libros en el archivo. ¿Deseas añadirlos a tu biblioteca actual?`)) {
               const processedBooks = validBooks.map(b => ({
-                ...b,
                 id: b.id || crypto.randomUUID(),
-                dateAdded: b.dateAdded || Date.now(),
+                title: b.title || 'Sin título',
+                author: b.author || 'Autor desconocido',
+                year: b.year || '',
+                summary: b.summary || '',
+                tags: b.tags || [],
+                driveUrl: b.driveUrl || '',
+                coverUrl: b.driveUrl ? '' : (b.coverUrl || ''),
                 status: b.status || 'want-to-read',
-                rating: b.rating || 0
+                rating: b.rating || 0,
+                dateAdded: b.dateAdded || Date.now()
               }));
 
-              // Combinar evitando duplicados por ID
-              const existingIds = new Set(books.map(b => b.id));
-              const uniqueNewBooks = processedBooks.filter(b => !existingIds.has(b.id));
-              const updatedList = [...uniqueNewBooks, ...books];
+              // Evitar duplicados por ID
+              const currentIds = new Set(books.map(b => b.id));
+              const finalBooks = [...books];
               
-              saveState(updatedList);
-              alert(`${uniqueNewBooks.length} libros nuevos añadidos.`);
+              processedBooks.forEach(pb => {
+                if (!currentIds.has(pb.id)) {
+                  finalBooks.push(pb);
+                }
+              });
+
+              saveState(finalBooks);
+              alert('Importación completada con éxito.');
             }
           } else {
-            alert("El archivo no contiene libros válidos.");
+            alert("No se encontraron libros válidos en el archivo.");
           }
+        } else {
+          alert("El formato del archivo no es una lista de libros válida.");
         }
       } catch (err) {
-        alert("Error: El archivo JSON no es válido.");
+        console.error("Error importando:", err);
+        alert("Error crítico: El archivo JSON tiene un formato incorrecto.");
       } finally {
         if (fileInputRef.current) fileInputRef.current.value = '';
       }
@@ -155,15 +172,11 @@ const App: React.FC = () => {
   };
 
   const deleteBook = useCallback((id: string) => {
-    // Implementación de la confirmación antes de borrar
-    const confirmed = window.confirm("¿Estás seguro de que deseas eliminar este libro de tu biblioteca? Esta acción no se puede deshacer.");
-    if (confirmed) {
-      setBooks(prev => {
-        const updated = prev.filter(b => b.id !== id);
-        localStorage.setItem('libros_manual_v1', JSON.stringify(updated));
-        return updated;
-      });
-    }
+    setBooks(prev => {
+      const updated = prev.filter(b => b.id !== id);
+      localStorage.setItem('libros_manual_v1', JSON.stringify(updated));
+      return updated;
+    });
   }, []);
 
   const toggleStatus = useCallback((id: string) => {
@@ -185,7 +198,7 @@ const App: React.FC = () => {
   const filteredBooks = books.filter(b => filter === 'all' ? true : b.status === filter);
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans transition-colors duration-500">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans transition-colors duration-500 pb-20">
       <nav className="sticky top-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -197,19 +210,19 @@ const App: React.FC = () => {
             <h1 className="text-xl font-black tracking-tighter uppercase hidden sm:block italic">Mi Biblioteca</h1>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-4">
-            <button onClick={exportLibrary} title="Exportar Biblioteca" className="p-2 sm:p-3 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center gap-2">
-              <span className="hidden md:inline text-[10px] font-bold uppercase tracking-widest">Exportar</span>
+          <div className="flex items-center gap-2">
+            <button onClick={exportLibrary} title="Exportar JSON" className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all flex items-center gap-2">
+              <span className="hidden md:inline text-[10px] font-bold uppercase">Exportar</span>
               📤
             </button>
-            <button onClick={() => fileInputRef.current?.click()} title="Importar Biblioteca" className="p-2 sm:p-3 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors flex items-center gap-2">
-              <span className="hidden md:inline text-[10px] font-bold uppercase tracking-widest">Importar</span>
+            <button onClick={() => fileInputRef.current?.click()} title="Importar JSON" className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-all flex items-center gap-2">
+              <span className="hidden md:inline text-[10px] font-bold uppercase">Importar</span>
               📥
             </button>
             <input type="file" ref={fileInputRef} onChange={importLibrary} accept=".json" className="hidden" />
-            <div className="w-px h-8 bg-slate-200 dark:bg-slate-800 mx-1 hidden sm:block"></div>
-            <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 sm:p-3 bg-slate-100 dark:bg-slate-800 rounded-xl">{isDarkMode ? '🌙' : '☀️'}</button>
-            <button onClick={() => setIsModalOpen(true)} className="px-4 sm:px-6 py-2 sm:py-3 bg-indigo-600 text-white rounded-xl text-xs sm:text-sm font-bold shadow-xl hover:bg-indigo-700">Añadir Libro</button>
+            <div className="w-px h-8 bg-slate-200 dark:bg-slate-800 mx-2"></div>
+            <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm">{isDarkMode ? '🌙' : '☀️'}</button>
+            <button onClick={() => setIsModalOpen(true)} className="ml-2 px-6 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg hover:bg-indigo-700 active:scale-95 transition-all">Nuevo Libro</button>
           </div>
         </div>
       </nav>
@@ -217,17 +230,17 @@ const App: React.FC = () => {
       <main className="max-w-7xl mx-auto px-6 py-10">
         <div className="flex gap-3 mb-12 overflow-x-auto no-scrollbar pb-2">
           {(['all', 'read', 'want-to-read'] as const).map(f => (
-            <button key={f} onClick={() => setFilter(f)} className={`px-8 py-3 rounded-full text-xs font-bold transition-all ${filter === f ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500'}`}>
+            <button key={f} onClick={() => setFilter(f)} className={`px-8 py-3 rounded-full text-xs font-bold transition-all border ${filter === f ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-500'}`}>
               {f === 'all' ? 'Todos' : f === 'read' ? 'Leídos' : 'Pendientes'}
             </button>
           ))}
         </div>
 
         {filteredBooks.length === 0 ? (
-          <div className="text-center py-32 bg-white dark:bg-slate-900/50 rounded-[3rem] border-4 border-dashed border-slate-200 dark:border-slate-800 animate-in fade-in">
-            <div className="text-4xl mb-4">📚</div>
+          <div className="text-center py-32 bg-white dark:bg-slate-900/30 rounded-[3rem] border-2 border-dashed border-slate-200 dark:border-slate-800">
+            <div className="text-5xl mb-6">📖</div>
             <p className="text-slate-400 font-bold uppercase tracking-widest text-sm">Biblioteca vacía</p>
-            <p className="text-slate-500 text-xs mt-2 uppercase">Presiona "Importar" para recuperar tu archivo JSON</p>
+            <p className="text-slate-500 text-xs mt-2 uppercase">Importa un archivo o añade uno nuevo con la IA</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
@@ -252,73 +265,74 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Modales de Edición, Adición y Bio (se mantienen igual pero con consistencia de estilos) */}
+      {/* Modal Editar */}
       {editingBook && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-xl">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[2.5rem] shadow-2xl p-10 sm:p-14 overflow-y-auto no-scrollbar max-h-[95vh]">
-            <div className="flex justify-between items-center mb-10">
-              <h3 className="text-3xl font-black">Editar Libro</h3>
-              <button onClick={() => setEditingBook(null)} className="text-slate-400 text-2xl">✕</button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[2.5rem] shadow-2xl p-8 sm:p-12 overflow-y-auto max-h-[90vh] no-scrollbar border border-slate-200 dark:border-slate-800">
+            <div className="flex justify-between items-center mb-8">
+              <h3 className="text-2xl font-black italic">Editar Registro</h3>
+              <button onClick={() => setEditingBook(null)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">✕</button>
             </div>
-            <div className="space-y-6">
+            <div className="space-y-5">
               <div>
-                <label className="text-[10px] font-black uppercase text-slate-400">Título</label>
-                <input type="text" value={editingBook.title} onChange={e => setEditingBook({...editingBook, title: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl font-bold border-2 border-transparent focus:border-indigo-600 outline-none" />
+                <label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Enlace de Google Drive (Carátula)</label>
+                <input type="text" value={editingBook.driveUrl || ''} onChange={e => setEditingBook({...editingBook, driveUrl: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl text-sm border-2 border-transparent focus:border-indigo-600 outline-none" placeholder="https://drive.google.com/..." />
               </div>
               <div>
-                <label className="text-[10px] font-black uppercase text-slate-400">Autor</label>
-                <input type="text" value={editingBook.author} onChange={e => setEditingBook({...editingBook, author: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl font-bold border-2 border-transparent focus:border-indigo-600 outline-none" />
+                <label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Título del Libro</label>
+                <input type="text" value={editingBook.title} onChange={e => setEditingBook({...editingBook, title: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl font-bold border-2 border-transparent focus:border-indigo-600 outline-none" />
               </div>
               <div>
-                <label className="text-[10px] font-black uppercase text-slate-400">Resumen</label>
-                <textarea rows={4} value={editingBook.summary} onChange={e => setEditingBook({...editingBook, summary: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border-2 border-transparent focus:border-indigo-600 outline-none" />
+                <label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Autor</label>
+                <input type="text" value={editingBook.author} onChange={e => setEditingBook({...editingBook, author: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl font-bold border-2 border-transparent focus:border-indigo-600 outline-none" />
               </div>
               <div>
-                <label className="text-[10px] font-black uppercase text-slate-400">Enlace Drive</label>
-                <input type="text" value={editingBook.driveUrl || ''} onChange={e => setEditingBook({...editingBook, driveUrl: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl text-xs border-2 border-transparent focus:border-indigo-600 outline-none" />
+                <label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Resumen / Notas</label>
+                <textarea rows={4} value={editingBook.summary} onChange={e => setEditingBook({...editingBook, summary: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border-2 border-transparent focus:border-indigo-600 outline-none text-sm leading-relaxed" />
               </div>
             </div>
-            <div className="flex gap-6 mt-10">
-              <button onClick={() => setEditingBook(null)} className="flex-1 py-4 bg-slate-100 dark:bg-slate-800 rounded-2xl font-black uppercase text-xs">Cerrar</button>
-              <button onClick={() => updateBook(editingBook)} className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs shadow-xl">Guardar</button>
+            <div className="flex gap-4 mt-8">
+              <button onClick={() => setEditingBook(null)} className="flex-1 py-4 bg-slate-100 dark:bg-slate-800 rounded-xl font-black uppercase text-[10px]">Cancelar</button>
+              <button onClick={() => updateBook(editingBook)} className="flex-[2] py-4 bg-indigo-600 text-white rounded-xl font-black uppercase text-[10px] shadow-lg">Guardar Cambios</button>
             </div>
           </div>
         </div>
       )}
 
+      {/* Modal Añadir */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-xl">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[2.5rem] shadow-2xl p-10 sm:p-14 overflow-y-auto no-scrollbar max-h-[95vh]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[2.5rem] shadow-2xl p-8 sm:p-12 border border-slate-200 dark:border-slate-800">
             {!previewBook ? (
               <form onSubmit={handleSearch}>
-                <div className="flex justify-between items-center mb-10">
-                  <h3 className="text-3xl font-black">Nuevo Libro</h3>
-                  <button type="button" onClick={() => setIsModalOpen(false)} className="text-slate-400 text-2xl">✕</button>
+                <div className="flex justify-between items-center mb-8">
+                  <h3 className="text-2xl font-black italic">Nuevo Libro</h3>
+                  <button type="button" onClick={() => setIsModalOpen(false)} className="text-slate-400 text-xl">✕</button>
                 </div>
-                <input autoFocus type="text" placeholder="Título o autor..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} disabled={isSearching} className="w-full p-8 bg-slate-50 dark:bg-slate-800/50 rounded-3xl mb-10 text-2xl font-bold border-4 border-transparent focus:border-indigo-600 outline-none transition-all shadow-inner" />
-                <div className="flex gap-6">
-                  <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-6 bg-slate-100 dark:bg-slate-800 rounded-2xl font-black uppercase text-xs">Cancelar</button>
-                  <button type="submit" disabled={isSearching || !searchQuery.trim()} className="flex-[2] py-6 bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs shadow-xl">Generar IA</button>
+                <input autoFocus type="text" placeholder="Escribe el nombre del libro..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} disabled={isSearching} className="w-full p-6 bg-slate-50 dark:bg-slate-800/50 rounded-2xl mb-8 text-xl font-bold border-2 border-transparent focus:border-indigo-600 outline-none shadow-inner" />
+                <div className="flex gap-4">
+                  <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-4 bg-slate-100 dark:bg-slate-800 rounded-xl font-black uppercase text-[10px]">Cerrar</button>
+                  <button type="submit" disabled={isSearching || !searchQuery.trim()} className="flex-[2] py-4 bg-indigo-600 text-white rounded-xl font-black uppercase text-[10px] shadow-lg disabled:opacity-50">Consultar IA</button>
                 </div>
-                {isSearching && <p className="mt-6 text-center text-indigo-600 text-xs font-black animate-pulse uppercase tracking-widest">{searchStatus}</p>}
+                {isSearching && <p className="mt-4 text-center text-indigo-600 text-[10px] font-black animate-pulse uppercase tracking-widest">{searchStatus}</p>}
               </form>
             ) : (
-              <div className="animate-in slide-in-from-bottom duration-500">
-                <div className="flex gap-10 mb-8 flex-col sm:flex-row">
-                  <img src={previewBook.tempBase64} className="w-52 aspect-[2/3] object-cover rounded-[2rem] shadow-2xl mx-auto border-4 border-white dark:border-slate-800" />
+              <div className="animate-in slide-in-from-bottom duration-300">
+                <div className="flex gap-8 mb-8 flex-col sm:flex-row items-center sm:items-start">
+                  <img src={previewBook.tempBase64} className="w-40 aspect-[2/3] object-cover rounded-2xl shadow-xl border-2 border-white dark:border-slate-700 shrink-0" />
                   <div className="flex-grow">
-                    <h4 className="text-2xl font-black mb-1">{previewBook.title}</h4>
-                    <p className="text-indigo-600 font-bold mb-4">{previewBook.author}</p>
-                    <p className="text-slate-500 text-sm italic mb-6 leading-relaxed line-clamp-4">{previewBook.summary}</p>
+                    <h4 className="text-xl font-black mb-1">{previewBook.title}</h4>
+                    <p className="text-indigo-600 font-bold mb-4 text-sm">{previewBook.author}</p>
+                    <p className="text-slate-500 text-[11px] italic mb-6 leading-relaxed line-clamp-3">{previewBook.summary}</p>
                     <div className="space-y-2">
                       <label className="text-[10px] font-black uppercase text-slate-400">Enlace Drive (opcional):</label>
-                      <input type="text" value={manualDriveLink} onChange={e => setManualDriveLink(e.target.value)} className="w-full p-4 bg-slate-100 dark:bg-slate-800 rounded-xl text-xs outline-none focus:ring-2 ring-indigo-500" placeholder="Pega el link de Google Drive aquí..." />
+                      <input type="text" value={manualDriveLink} onChange={e => setManualDriveLink(e.target.value)} className="w-full p-3 bg-slate-100 dark:bg-slate-800 rounded-xl text-[11px] outline-none focus:ring-2 ring-indigo-500" placeholder="Pega el enlace de Drive..." />
                     </div>
                   </div>
                 </div>
-                <div className="flex gap-6">
-                  <button onClick={() => setPreviewBook(null)} className="flex-1 py-4 bg-slate-100 dark:bg-slate-800 rounded-2xl font-black uppercase text-xs">Atrás</button>
-                  <button onClick={addBookToLibrary} className="flex-[2] py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase text-xs shadow-xl">Confirmar Guardado</button>
+                <div className="flex gap-4">
+                  <button onClick={() => setPreviewBook(null)} className="flex-1 py-4 bg-slate-100 dark:bg-slate-800 rounded-xl font-black uppercase text-[10px]">Atrás</button>
+                  <button onClick={addBookToLibrary} className="flex-[2] py-4 bg-emerald-600 text-white rounded-xl font-black uppercase text-[10px] shadow-lg">Confirmar</button>
                 </div>
               </div>
             )}
@@ -327,11 +341,11 @@ const App: React.FC = () => {
       )}
 
       {authorBio && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/95 backdrop-blur-2xl">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-xl rounded-[3rem] p-12 shadow-2xl animate-in zoom-in">
-            <h3 className="text-3xl font-black mb-6 text-indigo-600">{authorBio.name}</h3>
-            <p className="text-slate-600 dark:text-slate-300 leading-relaxed mb-10 whitespace-pre-wrap">{isLoadingBio ? "Buscando biografía..." : authorBio.bio}</p>
-            <button onClick={() => setAuthorBio(null)} className="w-full py-5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl font-black uppercase text-xs">Cerrar</button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-[2.5rem] p-10 shadow-2xl border border-slate-200 dark:border-slate-800">
+            <h3 className="text-2xl font-black mb-4 text-indigo-600">{authorBio.name}</h3>
+            <p className="text-slate-600 dark:text-slate-300 text-sm leading-relaxed mb-8 whitespace-pre-wrap italic">{isLoadingBio ? "Cargando información..." : authorBio.bio}</p>
+            <button onClick={() => setAuthorBio(null)} className="w-full py-4 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl font-black uppercase text-[10px]">Cerrar</button>
           </div>
         </div>
       )}
