@@ -8,7 +8,7 @@ export interface Book {
   tags: string[];
   coverUrl: string; // URL temporal o base64 inicial
   driveUrl?: string; // El enlace manual de Google Drive
-  status: 'read' | 'want-to-read';
+  status: 'read' | 'want-to-read' | 'reading';
   rating: number; 
   dateAdded: number;
 }
