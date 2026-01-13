@@ -9,43 +9,27 @@ interface BookCardProps {
   onRate: (id: string, rating: number) => void;
   onAuthorClick: (author: string) => void;
   onEdit: () => void;
+  onReadMore: () => void;
 }
 
-export const BookCard: React.FC<BookCardProps> = ({ book, onDelete, onToggleStatus, onRate, onAuthorClick, onEdit }) => {
+export const BookCard: React.FC<BookCardProps> = ({ book, onDelete, onToggleStatus, onRate, onAuthorClick, onEdit, onReadMore }) => {
   const [isConfirming, setIsConfirming] = useState(false);
 
-  // Resetear el estado de confirmación después de 3 segundos de inactividad
   useEffect(() => {
     let timeout: number;
     if (isConfirming) {
-      timeout = window.setTimeout(() => {
-        setIsConfirming(false);
-      }, 3000);
+      timeout = window.setTimeout(() => setIsConfirming(false), 3000);
     }
-    return () => {
-      if (timeout) window.clearTimeout(timeout);
-    };
+    return () => timeout && window.clearTimeout(timeout);
   }, [isConfirming]);
 
   const getDirectDriveLink = (url: string) => {
     if (!url) return null;
     if (url.includes('drive.google.com')) {
-      const match = url.match(/\/d\/(.+?)\/(view|edit)?/) || url.match(/id=(.+?)(&|$)/);
-      if (match && match[1]) {
-        return `https://lh3.googleusercontent.com/u/0/d/${match[1]}`;
-      }
+      const match = url.match(/\/d\/(.+?)\//) || url.match(/id=(.+?)(&|$)/);
+      if (match && match[1]) return `https://lh3.googleusercontent.com/u/0/d/${match[1]}`;
     }
     return url;
-  };
-
-  const handleDeleteClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (isConfirming) {
-      onDelete(book.id);
-      setIsConfirming(false);
-    } else {
-      setIsConfirming(true);
-    }
   };
 
   const driveImg = getDirectDriveLink(book.driveUrl || '');
@@ -59,16 +43,16 @@ export const BookCard: React.FC<BookCardProps> = ({ book, onDelete, onToggleStat
           alt={book.title} 
           className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
           loading="lazy"
-          onError={(e) => {
-            (e.target as HTMLImageElement).src = `https://via.placeholder.com/400x600/4f46e5/ffffff?text=${encodeURIComponent(book.title)}`;
-          }}
+          onError={(e) => { (e.target as HTMLImageElement).src = `https://via.placeholder.com/400x600/4f46e5/ffffff?text=${encodeURIComponent(book.title)}`; }}
         />
         
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-6 gap-2">
-           {book.driveUrl && (
-             <a href={book.driveUrl} target="_blank" rel="noopener noreferrer" className="w-full py-3 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest text-center shadow-lg hover:bg-indigo-700 transition-colors">Ver en Drive</a>
-           )}
-           <button onClick={onEdit} className="w-full py-3 bg-white/20 backdrop-blur-md text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white/40 transition-colors">Editar Datos</button>
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-6 gap-2">
+           <button onClick={onReadMore} className="w-full py-3 bg-white text-indigo-900 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg hover:bg-slate-100 transition-colors">Leer Sinopsis</button>
+           <button onClick={onEdit} className="w-full py-3 bg-white/20 backdrop-blur-md text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white/40 transition-colors">Editar Ficha</button>
+        </div>
+
+        <div className="absolute top-4 right-4 px-3 py-1 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md rounded-lg text-[9px] font-black text-slate-900 dark:text-white shadow-md z-10 uppercase tracking-tighter">
+          {book.year || 'S/A'}
         </div>
 
         <div className={`absolute top-4 left-4 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider shadow-lg backdrop-blur-md z-10 ${
@@ -98,17 +82,10 @@ export const BookCard: React.FC<BookCardProps> = ({ book, onDelete, onToggleStat
 
         <div className="mt-auto pt-4 space-y-2">
           <button onClick={() => onToggleStatus(book.id)} className={`w-full py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${book.status === 'read' ? 'bg-slate-100 dark:bg-slate-800 text-slate-500' : 'bg-indigo-600 text-white shadow-md'}`}>
-            {book.status === 'read' ? 'Leído' : '¿Terminado?'}
+            {book.status === 'read' ? 'Marcar Pendiente' : '¿Terminado?'}
           </button>
-          <button 
-            onClick={handleDeleteClick} 
-            className={`w-full py-2 text-[9px] font-black uppercase tracking-widest transition-all duration-300 rounded-lg ${
-              isConfirming 
-                ? 'bg-red-600 text-white shadow-lg scale-105' 
-                : 'text-slate-400 hover:text-red-500'
-            }`}
-          >
-            {isConfirming ? '⚠️ ¿Confirmar eliminación?' : 'Eliminar Libro'}
+          <button onClick={() => isConfirming ? onDelete(book.id) : setIsConfirming(true)} className={`w-full py-2 text-[9px] font-black uppercase tracking-widest transition-all duration-300 rounded-lg ${isConfirming ? 'bg-red-600 text-white shadow-lg scale-105' : 'text-slate-400 hover:text-red-500'}`}>
+            {isConfirming ? '⚠️ Confirmar' : 'Eliminar'}
           </button>
         </div>
       </div>
