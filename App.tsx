@@ -2,12 +2,13 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Book } from './types';
 import { BookCard } from './components/BookCard';
-import { searchBookInfo, getAuthorBio } from './geminiService';
+import { searchBookInfo, getAuthorBio, generateImage } from './geminiService';
 
 const App: React.FC = () => {
   const [books, setBooks] = useState<Book[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
   const [searchStatus, setSearchStatus] = useState('');
   const [previewBook, setPreviewBook] = useState<any>(null);
   const [editingBook, setEditingBook] = useState<Book | null>(null);
@@ -59,6 +60,19 @@ const App: React.FC = () => {
     }
   };
 
+  const handleRegenerateImage = async () => {
+    if (!previewBook || isRegenerating) return;
+    setIsRegenerating(true);
+    try {
+      const newImage = await generateImage(previewBook.title, previewBook.author, previewBook.imagePrompt);
+      setPreviewBook({ ...previewBook, tempBase64: newImage });
+    } catch (err) {
+      alert('Error al regenerar la portada.');
+    } finally {
+      setIsRegenerating(false);
+    }
+  };
+
   const downloadImage = () => {
     if (!previewBook?.tempBase64) return;
     const link = document.createElement('a');
@@ -90,6 +104,7 @@ const App: React.FC = () => {
   };
 
   const updateBook = (updatedBook: Book) => {
+    // Si hay un driveUrl, limpiamos el coverUrl de base64 para ahorrar espacio en localStorage
     const cleanedBook = {
       ...updatedBook,
       coverUrl: updatedBook.driveUrl ? '' : updatedBook.coverUrl
@@ -328,19 +343,31 @@ const App: React.FC = () => {
                     placeholder="Misterio, Historia..."
                   />
                 </div>
-                <div>
-                  <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">Estado</label>
-                  <select 
-                    value={editingBook.status} 
-                    onChange={e => setEditingBook({...editingBook, status: e.target.value as Book['status']})}
-                    className="w-full p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl font-bold outline-none text-sm"
-                  >
-                    <option value="want-to-read">Pendiente</option>
-                    <option value="reading">Leyendo</option>
-                    <option value="read">Leído</option>
-                    <option value="re-reading">Releído</option>
-                    <option value="abandoned">Abandonado</option>
-                  </select>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">Estado</label>
+                    <select 
+                      value={editingBook.status} 
+                      onChange={e => setEditingBook({...editingBook, status: e.target.value as Book['status']})}
+                      className="w-full p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl font-bold outline-none text-sm"
+                    >
+                      <option value="want-to-read">Pendiente</option>
+                      <option value="reading">Leyendo</option>
+                      <option value="read">Leído</option>
+                      <option value="re-reading">Releído</option>
+                      <option value="abandoned">Abandonado</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">Portada (Enlace Drive)</label>
+                    <input 
+                      type="text" 
+                      value={editingBook.driveUrl || ''} 
+                      onChange={e => setEditingBook({...editingBook, driveUrl: e.target.value})} 
+                      className="w-full p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl font-bold border-2 border-transparent focus:border-indigo-600 outline-none text-sm" 
+                      placeholder="https://drive.google.com/..."
+                    />
+                  </div>
                 </div>
                 <button onClick={() => updateBook(editingBook)} className="w-full py-4 bg-indigo-600 text-white rounded-xl font-black uppercase text-[10px] shadow-lg mt-4">Guardar Cambios</button>
               </div>
@@ -379,7 +406,7 @@ const App: React.FC = () => {
                          selectedBookForBio!.status === 're-reading' ? 'bg-purple-500' :
                          selectedBookForBio!.status === 'reading' ? 'bg-indigo-500' : 'bg-slate-400'
                        }`}>
-                         {selectedBookForBio!.status === 're-reading' ? 'Releído' : selectedBookForBio!.status}
+                         {selectedBookForBio!.status === 're-reading' ? 'Releído' : (selectedBookForBio!.status === 'read' ? 'Leído' : (selectedBookForBio!.status === 'reading' ? 'Leyendo' : (selectedBookForBio!.status === 'abandoned' ? 'Abandonado' : 'Pendiente')))}
                        </span>
                     </div>
                  </div>
@@ -406,11 +433,22 @@ const App: React.FC = () => {
               <div className="animate-in slide-in-from-bottom duration-300">
                 <div className="flex gap-8 mb-8 flex-col sm:flex-row items-center sm:items-start">
                   <div className="relative group shrink-0">
-                    <img src={previewBook.tempBase64} className="w-40 aspect-[2/3] object-cover rounded-2xl shadow-xl border-2 border-white dark:border-slate-700" />
-                    <button onClick={downloadImage} className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl flex flex-col items-center justify-center text-white text-[10px] font-black uppercase p-2 text-center">
-                       <span>⬇️ Guardar</span>
-                       <span>Portada IA</span>
-                    </button>
+                    <div className="relative">
+                      {isRegenerating && (
+                         <div className="absolute inset-0 bg-black/40 backdrop-blur-sm rounded-2xl flex items-center justify-center z-10">
+                            <div className="w-8 h-8 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
+                         </div>
+                      )}
+                      <img src={previewBook.tempBase64} className="w-40 aspect-[2/3] object-cover rounded-2xl shadow-xl border-2 border-white dark:border-slate-700" />
+                    </div>
+                    <div className="flex flex-col gap-2 mt-4">
+                      <button onClick={downloadImage} className="w-full py-2 bg-slate-100 dark:bg-slate-800 rounded-lg text-[9px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300 flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors">
+                         <span>⬇️ Descargar</span>
+                      </button>
+                      <button onClick={handleRegenerateImage} disabled={isRegenerating} className="w-full py-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg text-[9px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center justify-center gap-2 hover:bg-indigo-100 transition-colors disabled:opacity-50">
+                         <span>🔄 Regenerar</span>
+                      </button>
+                    </div>
                   </div>
                   <div className="flex-grow">
                     <div className="flex justify-between items-start mb-1">

@@ -4,7 +4,7 @@ import { SearchResult } from "./types";
 
 const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-export const searchBookInfo = async (query: string): Promise<Omit<SearchResult, 'coverUrl'> & { tempBase64: string }> => {
+export const searchBookInfo = async (query: string): Promise<Omit<SearchResult, 'coverUrl'> & { tempBase64: string, imagePrompt: string }> => {
   const ai = getAI();
   
   const textResponse = await ai.models.generateContent({
@@ -29,26 +29,31 @@ export const searchBookInfo = async (query: string): Promise<Omit<SearchResult, 
   });
 
   const bookData = JSON.parse(textResponse.text || '{}');
+  const tempBase64 = await generateImage(bookData.title, bookData.author, bookData.imagePrompt);
 
+  return { ...bookData, tempBase64 };
+};
+
+export const generateImage = async (title: string, author: string, prompt: string): Promise<string> => {
+  const ai = getAI();
   const imageResponse = await ai.models.generateContent({
     model: 'gemini-2.5-flash-image',
     contents: { 
       parts: [{ 
-        text: `A professional book cover for "${bookData.title}" by ${bookData.author}. 
-        The cover MUST clearly display the title "${bookData.title}" and the author name "${bookData.author}" in elegant, readable typography. 
-        Style: ${bookData.imagePrompt}. High quality graphic design, cinematic lighting.` 
+        text: `A professional book cover for "${title}" by ${author}. 
+        The cover MUST clearly display the title "${title}" and the author name "${author}" in elegant, readable typography. 
+        Style description: ${prompt}. High quality graphic design, cinematic lighting, artistic book cover.` 
       }] 
     },
     config: { imageConfig: { aspectRatio: "2:3" } }
   });
 
-  let tempBase64 = "";
+  let base64 = "";
   const part = imageResponse.candidates?.[0]?.content?.parts.find(p => p.inlineData);
   if (part?.inlineData) {
-    tempBase64 = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+    base64 = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
   }
-
-  return { ...bookData, tempBase64 };
+  return base64;
 };
 
 export const getAuthorBio = async (authorName: string): Promise<string> => {
