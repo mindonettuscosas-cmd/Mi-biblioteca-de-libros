@@ -14,7 +14,7 @@ const App: React.FC = () => {
   const [manualDriveLink, setManualDriveLink] = useState('');
   const [selectedBookForBio, setSelectedBookForBio] = useState<Book | null>(null);
   
-  const [filter, setFilter] = useState<'all' | 'read' | 'want-to-read' | 'reading'>('all');
+  const [filter, setFilter] = useState<'all' | 'read' | 'want-to-read' | 'reading' | 'abandoned' | 're-reading'>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('theme') !== 'light');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -193,6 +193,24 @@ const App: React.FC = () => {
     reader.readAsText(file);
   };
 
+  const toggleBookStatus = (id: string) => {
+    const book = books.find(b => b.id === id);
+    if (!book) return;
+    
+    // Status cycle: want-to-read -> reading -> read -> re-reading -> abandoned -> back to want-to-read
+    let nextStatus: Book['status'];
+    switch (book.status) {
+      case 'want-to-read': nextStatus = 'reading'; break;
+      case 'reading': nextStatus = 'read'; break;
+      case 'read': nextStatus = 're-reading'; break;
+      case 're-reading': nextStatus = 'abandoned'; break;
+      case 'abandoned': nextStatus = 'want-to-read'; break;
+      default: nextStatus = 'want-to-read';
+    }
+    
+    saveState(books.map(b => b.id === id ? { ...b, status: nextStatus } : b));
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans transition-colors duration-500 pb-20">
       <nav className="sticky top-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800">
@@ -207,7 +225,7 @@ const App: React.FC = () => {
           </div>
           <div className="flex items-center gap-1.5">
             <button onClick={exportToJSON} className="p-2.5 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all flex items-center gap-2">
-              <span className="hidden md:inline text-[9px] font-bold uppercase">Guardar JSON</span>
+              <span className="hidden md:inline text-[9px] font-bold uppercase">JSON</span>
               💾
             </button>
             <button onClick={exportToPDF} className="p-2.5 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all flex items-center gap-2">
@@ -228,9 +246,13 @@ const App: React.FC = () => {
       <main className="max-w-[1600px] mx-auto px-4 py-8">
         <div className="flex flex-col md:flex-row gap-4 mb-8 items-start md:items-center">
           <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-            {(['all', 'read', 'reading', 'want-to-read'] as const).map(f => (
+            {(['all', 'read', 'reading', 'want-to-read', 're-reading', 'abandoned'] as const).map(f => (
               <button key={f} onClick={() => setFilter(f)} className={`px-5 py-2 rounded-full text-[10px] font-bold transition-all border whitespace-nowrap ${filter === f ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-500'}`}>
-                {f === 'all' ? 'Todos' : f === 'read' ? 'Leídos' : f === 'reading' ? 'Leyendo' : 'Pendientes'}
+                {f === 'all' ? 'Todos' : 
+                 f === 'read' ? 'Leídos' : 
+                 f === 'reading' ? 'Leyendo' : 
+                 f === 're-reading' ? 'Releídos' : 
+                 f === 'abandoned' ? 'Abandonados' : 'Pendientes'}
               </button>
             ))}
           </div>
@@ -256,10 +278,7 @@ const App: React.FC = () => {
               key={book.id} 
               book={book} 
               onDelete={(id) => saveState(books.filter(b => b.id !== id))} 
-              onToggleStatus={(id) => {
-                const nextStatus: Book['status'] = book.status === 'want-to-read' ? 'reading' : (book.status === 'reading' ? 'read' : 'want-to-read');
-                saveState(books.map(b => b.id === id ? {...b, status: nextStatus} : b));
-              }} 
+              onToggleStatus={toggleBookStatus} 
               onRate={(id, r) => saveState(books.map(b => b.id === id ? {...b, rating: r} : b))} 
               onEdit={() => setEditingBook(book)}
               onReadMore={() => setSelectedBookForBio(book)}
@@ -277,68 +296,92 @@ const App: React.FC = () => {
 
       {(editingBook || selectedBookForBio) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[2.5rem] shadow-2xl p-8 sm:p-12 overflow-y-auto max-h-[90vh] no-scrollbar border border-slate-200 dark:border-slate-800">
-            <div className="flex justify-between items-center mb-8">
-              <h3 className="text-2xl font-black italic">{editingBook ? 'Editar Libro' : 'Detalles'}</h3>
+          <div className="bg-white dark:bg-slate-900 w-full max-w-3xl rounded-[2.5rem] shadow-2xl p-6 sm:p-10 overflow-y-auto max-h-[90vh] no-scrollbar border border-slate-200 dark:border-slate-800">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-black italic">{editingBook ? 'Editar Libro' : 'Ficha Técnica'}</h3>
               <button onClick={() => {setEditingBook(null); setSelectedBookForBio(null);}} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">✕</button>
             </div>
             
             {editingBook ? (
-              <div className="space-y-5">
+              <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Título</label>
-                    <input type="text" value={editingBook.title} onChange={e => setEditingBook({...editingBook, title: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl font-bold border-2 border-transparent focus:border-indigo-600 outline-none" />
+                    <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">Título</label>
+                    <input type="text" value={editingBook.title} onChange={e => setEditingBook({...editingBook, title: e.target.value})} className="w-full p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl font-bold border-2 border-transparent focus:border-indigo-600 outline-none text-sm" />
                   </div>
                   <div>
-                    <label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Año</label>
-                    <input type="text" value={editingBook.year} onChange={e => setEditingBook({...editingBook, year: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl font-bold border-2 border-transparent focus:border-indigo-600 outline-none" />
+                    <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">Año</label>
+                    <input type="text" value={editingBook.year} onChange={e => setEditingBook({...editingBook, year: e.target.value})} className="w-full p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl font-bold border-2 border-transparent focus:border-indigo-600 outline-none text-sm" />
                   </div>
                 </div>
                 <div>
-                  <label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Autor</label>
-                  <input type="text" value={editingBook.author} onChange={e => setEditingBook({...editingBook, author: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl font-bold border-2 border-transparent focus:border-indigo-600 outline-none" />
+                  <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">Autor</label>
+                  <input type="text" value={editingBook.author} onChange={e => setEditingBook({...editingBook, author: e.target.value})} className="w-full p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl font-bold border-2 border-transparent focus:border-indigo-600 outline-none text-sm" />
                 </div>
                 <div>
-                  <label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Categorías (separadas por coma)</label>
+                  <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">Categorías</label>
                   <input 
                     type="text" 
                     value={editingBook.tags.join(', ')} 
                     onChange={e => setEditingBook({...editingBook, tags: e.target.value.split(',').map(t => t.trim()).filter(t => t !== '')})} 
-                    className="w-full p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl font-bold border-2 border-transparent focus:border-indigo-600 outline-none"
-                    placeholder="Ej: Misterio, Thriller, Historia"
+                    className="w-full p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl font-bold border-2 border-transparent focus:border-indigo-600 outline-none text-sm"
+                    placeholder="Misterio, Historia..."
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Estado</label>
+                  <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">Estado</label>
                   <select 
                     value={editingBook.status} 
                     onChange={e => setEditingBook({...editingBook, status: e.target.value as Book['status']})}
-                    className="w-full p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl font-bold outline-none"
+                    className="w-full p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl font-bold outline-none text-sm"
                   >
                     <option value="want-to-read">Pendiente</option>
                     <option value="reading">Leyendo</option>
                     <option value="read">Leído</option>
+                    <option value="re-reading">Releído</option>
+                    <option value="abandoned">Abandonado</option>
                   </select>
                 </div>
-                <div className="flex gap-4 pt-4">
-                  <button onClick={() => updateBook(editingBook)} className="flex-grow py-4 bg-indigo-600 text-white rounded-xl font-black uppercase text-[10px] shadow-lg">Guardar</button>
-                </div>
+                <button onClick={() => updateBook(editingBook)} className="w-full py-4 bg-indigo-600 text-white rounded-xl font-black uppercase text-[10px] shadow-lg mt-4">Guardar Cambios</button>
               </div>
             ) : (
-              <div className="space-y-6">
-                 <div className="flex gap-6 items-start">
-                    <img src={getDirectDriveLink(selectedBookForBio!.driveUrl || '') || selectedBookForBio!.coverUrl} className="w-32 aspect-[2/3] object-cover rounded-xl shadow-md" />
-                    <div>
-                      <h4 className="text-xl font-black">{selectedBookForBio!.title} ({selectedBookForBio!.year})</h4>
-                      <p className="text-indigo-600 font-bold mb-4">{selectedBookForBio!.author}</p>
-                      <div className="flex flex-wrap gap-2">
-                        {selectedBookForBio!.tags.map(t => <span key={t} className="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-[9px] font-bold rounded-md uppercase">{t}</span>)}
-                      </div>
-                    </div>
+              <div className="flex flex-col md:flex-row gap-8 items-center md:items-start animate-in fade-in duration-500">
+                 <div className="shrink-0 w-full max-w-[280px]">
+                    <img 
+                      src={getDirectDriveLink(selectedBookForBio!.driveUrl || '') || selectedBookForBio!.coverUrl} 
+                      className="w-full aspect-[2/3] object-cover rounded-[2rem] shadow-2xl border-4 border-white dark:border-slate-800" 
+                    />
                  </div>
-                 <div className="p-6 bg-slate-50 dark:bg-slate-800/30 rounded-2xl border border-slate-100 dark:border-slate-800">
-                    <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300 italic">{selectedBookForBio!.summary}</p>
+                 <div className="flex-grow space-y-6 text-center md:text-left">
+                    <div>
+                      <h4 className="text-3xl font-black mb-2 leading-tight">{selectedBookForBio!.title}</h4>
+                      <p className="text-xl text-indigo-600 font-bold mb-1">{selectedBookForBio!.author}</p>
+                      <span className="text-slate-400 font-bold uppercase tracking-widest text-xs italic">{selectedBookForBio!.year}</span>
+                    </div>
+
+                    <div className="flex flex-wrap justify-center md:justify-start gap-2">
+                      {selectedBookForBio!.tags.map(t => (
+                        <span key={t} className="px-3 py-1 bg-slate-100 dark:bg-slate-800 text-[9px] font-black rounded-full uppercase tracking-wider text-slate-500 border border-slate-200 dark:border-slate-700">{t}</span>
+                      ))}
+                    </div>
+
+                    <div className="p-6 bg-slate-50 dark:bg-slate-800/30 rounded-[1.5rem] border border-slate-100 dark:border-slate-800 relative">
+                       <div className="absolute -top-3 left-6 px-3 py-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-full text-[8px] font-black uppercase tracking-tighter italic">Sinopsis</div>
+                       <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300 italic whitespace-pre-wrap">{selectedBookForBio!.summary}</p>
+                    </div>
+
+                    <div className="flex items-center justify-center md:justify-start gap-4">
+                       <div className="flex gap-1 text-amber-400">
+                          {'★'.repeat(selectedBookForBio!.rating)}{'☆'.repeat(5 - selectedBookForBio!.rating)}
+                       </div>
+                       <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest text-white ${
+                         selectedBookForBio!.status === 'read' ? 'bg-emerald-500' : 
+                         selectedBookForBio!.status === 're-reading' ? 'bg-purple-500' :
+                         selectedBookForBio!.status === 'reading' ? 'bg-indigo-500' : 'bg-slate-400'
+                       }`}>
+                         {selectedBookForBio!.status === 're-reading' ? 'Releído' : selectedBookForBio!.status}
+                       </span>
+                    </div>
                  </div>
               </div>
             )}
@@ -351,11 +394,11 @@ const App: React.FC = () => {
           <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[2.5rem] shadow-2xl p-8 sm:p-12 border border-slate-200 dark:border-slate-800">
             {!previewBook ? (
               <form onSubmit={handleSearch}>
-                <h3 className="text-2xl font-black italic mb-8">Consultar Libro</h3>
+                <h3 className="text-2xl font-black italic mb-8 text-center md:text-left">Añadir Nuevo Libro</h3>
                 <input autoFocus type="text" placeholder="Título o autor..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} disabled={isSearching} className="w-full p-6 bg-slate-50 dark:bg-slate-800/50 rounded-2xl mb-8 text-xl font-bold border-2 border-transparent focus:border-indigo-600 outline-none shadow-inner" />
                 <div className="flex gap-4">
                    <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-4 bg-slate-100 dark:bg-slate-800 rounded-xl font-black uppercase text-[10px]">Cerrar</button>
-                   <button type="submit" disabled={isSearching || !searchQuery.trim()} className="flex-[2] py-4 bg-indigo-600 text-white rounded-xl font-black uppercase text-[10px] shadow-lg disabled:opacity-50">Generar Ficha</button>
+                   <button type="submit" disabled={isSearching || !searchQuery.trim()} className="flex-[2] py-4 bg-indigo-600 text-white rounded-xl font-black uppercase text-[10px] shadow-lg disabled:opacity-50">Generar con IA</button>
                 </div>
                 {isSearching && <p className="mt-4 text-center text-indigo-600 text-[10px] font-black animate-pulse uppercase tracking-widest">{searchStatus}</p>}
               </form>
@@ -365,7 +408,7 @@ const App: React.FC = () => {
                   <div className="relative group shrink-0">
                     <img src={previewBook.tempBase64} className="w-40 aspect-[2/3] object-cover rounded-2xl shadow-xl border-2 border-white dark:border-slate-700" />
                     <button onClick={downloadImage} className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl flex flex-col items-center justify-center text-white text-[10px] font-black uppercase p-2 text-center">
-                       <span>⬇️ Descargar</span>
+                       <span>⬇️ Guardar</span>
                        <span>Portada IA</span>
                     </button>
                   </div>
@@ -377,7 +420,7 @@ const App: React.FC = () => {
                     <p className="text-indigo-600 font-bold mb-4 text-sm">{previewBook.author}</p>
                     <p className="text-slate-500 text-[11px] italic mb-6 leading-relaxed line-clamp-3">{previewBook.summary}</p>
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase text-slate-400 italic">Pega aquí el link de Drive tras subir la portada:</label>
+                      <label className="text-[10px] font-black uppercase text-slate-400 italic">Pega link de Drive (opcional):</label>
                       <input type="text" value={manualDriveLink} onChange={e => setManualDriveLink(e.target.value)} className="w-full p-3 bg-slate-100 dark:bg-slate-800 rounded-xl text-[11px] outline-none focus:ring-2 ring-indigo-500" placeholder="https://drive.google.com/..." />
                     </div>
                   </div>

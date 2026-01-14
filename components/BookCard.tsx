@@ -37,9 +37,11 @@ export const BookCard: React.FC<BookCardProps> = ({ book, onDelete, onToggleStat
 
   const getStatusConfig = (status: Book['status']) => {
     switch(status) {
-      case 'read': return { label: 'Leído', color: 'bg-emerald-500', btnLabel: 'Marcar Pendiente' };
-      case 'reading': return { label: 'Leyendo', color: 'bg-indigo-500', btnLabel: 'Marcar Leído' };
-      default: return { label: 'Pendiente', color: 'bg-amber-500', btnLabel: 'Empezar a leer' };
+      case 'read': return { label: 'Leído', color: 'bg-emerald-500', btnLabel: 'Releer' };
+      case 'reading': return { label: 'Leyendo', color: 'bg-indigo-500', btnLabel: 'Terminar' };
+      case 're-reading': return { label: 'Releído', color: 'bg-purple-500', btnLabel: 'Abandonar' };
+      case 'abandoned': return { label: 'Abandonado', color: 'bg-slate-500', btnLabel: 'Reiniciar' };
+      default: return { label: 'Pendiente', color: 'bg-amber-500', btnLabel: 'Empezar' };
     }
   };
 
@@ -96,7 +98,9 @@ export const BookCard: React.FC<BookCardProps> = ({ book, onDelete, onToggleStat
         <div className="mt-auto pt-2 space-y-1">
           <button onClick={() => onToggleStatus(book.id)} className={`w-full py-2 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${
             book.status === 'reading' ? 'bg-indigo-600 text-white shadow-sm' : 
-            book.status === 'read' ? 'bg-slate-100 dark:bg-slate-800 text-slate-500' : 
+            book.status === 'read' ? 'bg-emerald-600 text-white shadow-sm' : 
+            book.status === 're-reading' ? 'bg-purple-600 text-white shadow-sm' :
+            book.status === 'abandoned' ? 'bg-slate-600 text-white shadow-sm' :
             'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400'
           }`}>
             {statusConfig.btnLabel}
